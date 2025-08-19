@@ -16,6 +16,8 @@
 #include <core/type_utils.h>
 #include <utils/eval_struct.h>
 
+#include <array>
+
 using namespace jsonapi;
 using namespace std::chrono_literals;
 
@@ -77,8 +79,8 @@ class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
 {
 
     eval_t_functional eval;
-    std::vector<DeviceIO_plugin *> _in;
-    std::vector<DeviceIO_plugin *> _out;
+    std::array<DeviceIO_plugin *,10> _in_arr = {nullptr};
+    std::array<DeviceIO_plugin *,10> _out_arr = {nullptr};
 
 public:
     virtual ~PLUGIN_IO_NAME() {
@@ -98,11 +100,11 @@ public:
         _cfg_str_array.clear();
         if (configured && _cfg.get("in", &_cfg_str_array))
         {
-            _in.clear();
-
+            _in_arr.fill(nullptr);
+            auto _in_ptr = _in_arr.begin();
             for (auto &name : _cfg_str_array)
             {
-                _in.push_back(core.pm_deviceIO.get_node(name));
+                *_in_ptr++ = core.plugins.get_node<DeviceIO_plugin>(name);
             }
         }
         else
@@ -113,11 +115,11 @@ public:
         _cfg_str_array.clear();
         if (configured && _cfg.get("out", &_cfg_str_array))
         {
-            _out.clear();
-
+            _out_arr.fill(nullptr);
+            auto _out_ptr = _out_arr.begin();
             for (auto &name : _cfg_str_array)
             {
-                _out.push_back(core.pm_deviceIO.get_node(name));
+                *_out_ptr++ = core.plugins.get_node<DeviceIO_plugin>(name);
             }
         }
         else
@@ -131,16 +133,27 @@ public:
     virtual int loop() override
     {
         auto &core = HH::Core::instance();
-        eval.t = core.get_run_time_double(1s);
+        eval.t = core.runner.get_run_time_double(1s);
+
+        for (size_t i = 0; i < _in_arr.size(); ++i) {
+            if(_in_arr[i]){
+                _in_arr[i]->read(&eval.x[i],0);
+            }else{
+                break;
+            }
+        }
 
         eval.parser.evaluate();
 
-        if (_out.size() > 0)
-        {
-            _out[0]->write(&eval.y[0], 0);
+        for (size_t i = 0; i < _out_arr.size(); ++i) {
+            if(_out_arr[i]){
+                _out_arr[i]->write(&eval.y[i],0);
+            }else{
+                break;
+            }
         }
 
-        hh_logi("y0: %f", eval.y[0]);
+        
         return 0;
     }
 };
