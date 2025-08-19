@@ -9,7 +9,6 @@
 
 #include "commIO/commIO_interface.h"
 
-
 #include "core/json_api.h"
 #include "core/core.h"
 #include "core/logger.h"
@@ -69,7 +68,7 @@ public:
                      _cfg.get("ramp", &devide_arg.ramp);
 
         auto &core = HH::Core::instance();
-        device = core.pm_deviceIO.get_node(device_str);
+        device = core.plugins.get_node<DeviceIO_plugin>(device_str);
 
         mode_int = parseMode(mode);
 
@@ -118,7 +117,6 @@ public:
         else
         {
             return device->write(nullptr, 0, arg1);
-            
         }
 
         return -1;
@@ -129,10 +127,6 @@ public:
         return 0;
     }
 
-    virtual bool command(uint32_t opcode, const void *arg = nullptr) override
-    {
-        return false;
-    }
 };
 
 __FINISH_PLUGIN_IO;

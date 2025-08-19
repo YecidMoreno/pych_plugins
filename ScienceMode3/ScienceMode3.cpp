@@ -78,7 +78,7 @@ public:
         _task._callback = [this]()
         { this->alive(); };
 
-        core.add_to_task("ScienceMode3_task", _task);
+        core.scheduler.add_to_task("ScienceMode3_task", _task);
 
         return true;
     }
@@ -92,6 +92,11 @@ public:
 
     virtual void disconnect() override
     {
+        hh_logn("ScienceMode Disconnect");
+        ScienceMode3_write ch{0};
+        ch.channel = 0;
+        ch.mA = 0;
+        this-write(nullptr,0,&ch);
     }
 
     virtual ssize_t write(void *data, size_t size, const void *arg1 = nullptr) override
@@ -119,7 +124,8 @@ public:
 
     virtual bool command(uint32_t opcode, const void *arg = nullptr) override
     {
-        return false;
+        hh_logn(" command %s ",TO_STR(PLUGIN_IO_NAME));
+        return true;
     }
     void fill_ml_init(Smpt_device *const device, Smpt_ml_init *const ml_init)
     {
