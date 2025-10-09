@@ -79,10 +79,27 @@ class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
 {
 
     eval_t_functional eval;
-    std::array<DeviceIO_plugin *,10> _in_arr = {nullptr};
-    std::array<DeviceIO_plugin *,10> _out_arr = {nullptr};
+    std::array<DeviceIO_plugin *, 10> _in_arr = {nullptr};
+    std::array<DeviceIO_plugin *, 10> _out_arr = {nullptr};
+    std::vector<std::string> _cfg_str_array;
 
 public:
+    struct
+    {
+        bool enabled = false;
+        std::string file_name;
+        std::vector<RecordVariables> file;
+        inline void loop()
+        {
+            if (!enabled)
+                return;
+            for (auto &f : file)
+            {
+                f.loop();
+            }
+        }
+    } _logger;
+
     virtual ~PLUGIN_IO_NAME() {
 
     };
@@ -96,7 +113,6 @@ public:
         configured = get_eval_functional_from_json(_cfg, "eval", eval);
         CONTROL_IO_CONFIGURE_TASK_FROM_JSON_;
 
-        std::vector<std::string> _cfg_str_array;
         _cfg_str_array.clear();
         if (configured && _cfg.get("in", &_cfg_str_array))
         {
@@ -127,7 +143,55 @@ public:
             configured = false;
         }
 
+        if (_cfg.get("log", &_logger.enabled))
+        {
+            if (_cfg.get("filename", &_logger.file_name))
+            {
+                if (_logger.enabled && _logger.file_name.empty())
+                {
+                    _logger.enabled = false;
+                }
+                else
+                {
+                    set_logger();
+                }
+            }
+        }
+
         return configured;
+    }
+
+    void set_logger()
+    {
+        int var_count = 0;
+        if (!_logger.enabled)
+            return;
+
+        auto &core = HH::Core::instance();
+
+        this->_logger.file.emplace_back();
+        this->_logger.file.back().set_file_name(core.config().logger.path + _logger.file_name + ".log");
+
+        _logger.file[0].vars.push_back(RecordVariable{.name = "time", .format = "%.4f", ._ptr = &eval.t});
+
+        _cfg_str_array.clear();
+        var_count = 0;
+        if (_cfg.get("in", &_cfg_str_array))
+        {
+            for (auto &name : _cfg_str_array)
+            {
+                _logger.file[0].vars.push_back(RecordVariable{.name = name.c_str(), .format = "%.4f", ._ptr = &eval.x[var_count++]});
+            }
+        }
+        _cfg_str_array.clear();
+        var_count = 0;
+        if (_cfg.get("out", &_cfg_str_array))
+        {
+            for (auto &name : _cfg_str_array)
+            {
+                _logger.file[0].vars.push_back(RecordVariable{.name = name.c_str(), .format = "%.4f", ._ptr = &eval.y[var_count++]});
+            }
+        }
     }
 
     virtual int loop() override
@@ -135,25 +199,34 @@ public:
         auto &core = HH::Core::instance();
         eval.t = core.runner.get_run_time_double(1s);
 
-        for (size_t i = 0; i < _in_arr.size(); ++i) {
-            if(_in_arr[i]){
-                _in_arr[i]->read(&eval.x[i],0);
-            }else{
+        for (size_t i = 0; i < _in_arr.size(); ++i)
+        {
+            if (_in_arr[i])
+            {
+                _in_arr[i]->read(&eval.x[i], 0);
+            }
+            else
+            {
                 break;
             }
         }
 
         eval.parser.evaluate();
 
-        for (size_t i = 0; i < _out_arr.size(); ++i) {
-            if(_out_arr[i]){
-                _out_arr[i]->write(&eval.y[i],0);
-            }else{
+        for (size_t i = 0; i < _out_arr.size(); ++i)
+        {
+            if (_out_arr[i])
+            {
+                _out_arr[i]->write(&eval.y[i], 0);
+            }
+            else
+            {
                 break;
             }
         }
 
-        
+        _logger.loop();
+
         return 0;
     }
 };
