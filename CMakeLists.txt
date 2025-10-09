@@ -40,6 +40,10 @@ list(APPEND PYCH_INSTALLED_TARGETS LogPrint)
 add_subdirectory(DelsysBaseStation)
 list(APPEND PYCH_INSTALLED_TARGETS DelsysBaseStation)
 
+add_subdirectory(SimpleControl)
+list(APPEND PYCH_INSTALLED_TARGETS SimpleImpedance)
+list(APPEND PYCH_INSTALLED_TARGETS SimpleCurrentMode)
+
 
 install(TARGETS ${PYCH_INSTALLED_TARGETS} 
     LIBRARY DESTINATION plugins
