@@ -26,6 +26,9 @@ class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
     double pos0 = 0;
     double pos1 = 0;
 
+    double mA_EPOS = 0;
+    double rpm_EPOS = 0;
+
     double t_ms, u;
 
     VariableTrace theta_in, theta_out;
@@ -70,6 +73,8 @@ public:
         _logger.file[0].vars.push_back(RecordVariable{.name = "dtheta_out", .fnc = [this]()
                                                                         { return theta_out.d(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "u", ._ptr = &u});
+        _logger.file[0].vars.push_back(RecordVariable{.name = "mA_EPOS", ._ptr = &mA_EPOS});
+        _logger.file[0].vars.push_back(RecordVariable{.name = "rpm_EPOS", ._ptr = &rpm_EPOS});
     }
 
     void print_event(std::chrono::nanoseconds now)
@@ -77,8 +82,8 @@ public:
         static auto next_time = now;
         if (now >= next_time)
         {
-            next_time += 1s;
-            // hh_logi("[SimpleImpedance] pos0: %8f\t pos1: %8f\t vel: %4f", pos0, pos1, vel);
+            next_time += 100ms;
+            hh_logi("[SimpleImpedance] pos0: %8f\t pos1: %8f\t vel: %4f mA_EPOS: %4f", pos0, pos1, u,mA_EPOS);
         }
     }
 
@@ -90,7 +95,7 @@ public:
         // for Velocity mode  
         // int32_t vel_int = static_cast<int32_t>(u);
 
-        _actuators[0]->write(&vel_int, 4);
+        _actuators[0]->write(&vel_int, 0);
     }
 
     virtual int loop() override
@@ -103,6 +108,8 @@ public:
         // Read sensors
         _sensors[0]->read(&pos0, 0);
         _sensors[1]->read(&pos1, 0);
+        _sensors[2]->read(&mA_EPOS, 0);
+        _sensors[3]->read(&rpm_EPOS, 0);
 
         // For continuous-time controller: compute dt with lower bound
         __CONTROL_IO_GET_DT(1e-3);
@@ -114,7 +121,7 @@ public:
         theta_out.update(pos1*M_PI/180.0, dt);
 
         /* P.Y.C.H. — Put Your Controller (Probably Overengineered) Here */
-        u = sin(2*M_PI*0.1*t_ms/1000.0)*1000.0;
+        u = sin(2*M_PI*0.1*t_ms/1000.0)*1500.0;
 
         // Apply control signal to actuator
         send_control_signal(u);
@@ -123,7 +130,7 @@ public:
         // Finalize loop timing and logging
         __CONTROL_IO_END_LOOP();
 
-        // print_event(now);
+        print_event(now);
         _logger.loop();
 
         return 0;

@@ -37,6 +37,7 @@ public:
     {
         configured = true;
         _cfg = json_obj::from_string(cfg);
+        hh_logi(">> Log0");
         return configured;
     }
 

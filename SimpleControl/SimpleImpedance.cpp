@@ -20,7 +20,7 @@ class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
 {
 
     float kp, kd,ki;
-    float kv;
+    float Kv, Bv;
 
     std::chrono::nanoseconds ts;
     
@@ -47,7 +47,8 @@ public:
         CONFIG_VALIDATE(_CFG_FIELD_GET(kd));
         CONFIG_VALIDATE(_CFG_FIELD_GET(ki));
 
-        CONFIG_VALIDATE(_CFG_FIELD_GET(kv));
+        CONFIG_VALIDATE(_CFG_FIELD_GET(Kv));
+        CONFIG_VALIDATE(_CFG_FIELD_GET(Bv));
 
         CONFIG_VALIDATE(_CFG_FIELD_GET(ts));
 
@@ -95,10 +96,10 @@ public:
     void send_control_signal(double u)
     {
         // for Current mode  
-        int16_t vel_int = static_cast<int16_t>(u);
+        // int16_t vel_int = static_cast<int16_t>(u);
 
         // for Velocity mode  
-        // int32_t vel_int = static_cast<int32_t>(u);
+        int32_t vel_int = static_cast<int32_t>(u);
 
 
         _actuators[0]->write(&vel_int, 4);
@@ -125,17 +126,20 @@ public:
         theta_in.update(pos0/N *M_PI/180.0, dt);
         theta_out.update(pos1*M_PI/180.0, dt);
 
+        static LowPassFilter lf_omega(20,0.001f);
+
+
         dx.update(theta_out.v()-theta_in.v(), dt);
-        fd = kv * ( 0  - theta_out.v()*1.0f);// 0; //-0.005*(0-theta_out.v());
-        // kv * ( 0  - theta_out.v())
-        
+        fd = Kv * ( 0  - theta_out.v()) + Bv * ( 0 - lf_omega.update(theta_out.d(),dt));
+
         static LowPassFilter lf_f(40,0.001f);
         f = lf_f.update(79.19*dx.v());
         
     
         param0.update(fd-f, dt);
+        
         /* P.Y.C.H. — Put Your Controller (Probably Overengineered) Here */
-        vel = ( kp * param0.v() + ki * param0.i() ) * N;
+        vel = ( kp * param0.v() + ki * param0.i() + kd * param0.d() ) * N;
 
         // Apply control signal to actuator
         send_control_signal(vel);
