@@ -19,19 +19,19 @@
 class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
 {
 
-    float kp, kd,ki;
+    float kp, kd, ki;
     float Kv, Bv;
 
     std::chrono::nanoseconds ts;
-    
+
     double pos0 = 0;
     double pos1 = 0;
-    double K = 10;
+    double Ks = 104;
+    double GR = 150.0f;
 
     double fd;
     double f;
 
-    float N = 101.0f;
     double t_ms, vel;
 
     VariableTrace theta_in, theta_out, error, dx, param0;
@@ -42,6 +42,9 @@ public:
     virtual bool config(const std::string &cfg) override
     {
         CONTROL_IO_INIT_CONFIG(cfg);
+
+        CONFIG_VALIDATE(_CFG_FIELD_GET(Ks));
+        CONFIG_VALIDATE(_CFG_FIELD_GET(GR));
 
         CONFIG_VALIDATE(_CFG_FIELD_GET(kp));
         CONFIG_VALIDATE(_CFG_FIELD_GET(kd));
@@ -69,13 +72,13 @@ public:
 
         _logger.file[0].vars.push_back(RecordVariable{.name = "time", .format = "%.4f", ._ptr = &t_ms});
         _logger.file[0].vars.push_back(RecordVariable{.name = "theta_in", .fnc = [this]()
-                                                                      { return theta_in.v(); }});
+                                                                          { return theta_in.v(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "dtheta_in", .fnc = [this]()
-                                                                        { return theta_in.d(); }});
+                                                                           { return theta_in.d(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "theta_out", .fnc = [this]()
-                                                                      { return theta_out.v(); }});
+                                                                           { return theta_out.v(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "dtheta_out", .fnc = [this]()
-                                                                        { return theta_out.d(); }});
+                                                                            { return theta_out.d(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "error", .fnc = [this]()
                                                                        { return error.v(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "vel", ._ptr = &vel});
@@ -95,12 +98,11 @@ public:
 
     void send_control_signal(double u)
     {
-        // for Current mode  
+        // for Current mode
         // int16_t vel_int = static_cast<int16_t>(u);
 
-        // for Velocity mode  
+        // for Velocity mode
         int32_t vel_int = static_cast<int32_t>(u);
-
 
         _actuators[0]->write(&vel_int, 4);
     }
@@ -111,7 +113,6 @@ public:
         __CONTROL_IO_BEGIN_LOOP();
 
         t_ms = core.runner.get_run_time_double(1ms);
-        
 
         // Read sensors
         _sensors[0]->read(&pos0, 0);
@@ -120,30 +121,27 @@ public:
         // For continuous-time controller: compute dt with lower bound
         __CONTROL_IO_GET_DT(1e-3);
 
-        
         // Update tracked variables and compute their derivatives and integrals
-        
-        theta_in.update(pos0/N *M_PI/180.0, dt);
-        theta_out.update(pos1*M_PI/180.0, dt);
 
-        static LowPassFilter lf_omega(20,0.001f);
+        theta_in.update(pos0 / GR, dt);
+        theta_out.update(pos1, dt);
 
+        static LowPassFilter lf_omega(20, 0.001f);
 
-        dx.update(theta_out.v()-theta_in.v(), dt);
-        fd = Kv * ( 0  - theta_out.v()) + Bv * ( 0 - lf_omega.update(theta_out.d(),dt));
+        dx.update(theta_out.v() - theta_in.v(), dt);
+        fd = Kv * (0 - theta_out.v()) + Bv * (0 - lf_omega.update(theta_out.d(), dt));
 
-        static LowPassFilter lf_f(40,0.001f);
-        f = lf_f.update(79.19*dx.v());
-        
-    
-        param0.update(fd-f, dt);
-        
+        static LowPassFilter lf_f(40, 0.001f);
+        f = lf_f.update(Ks * dx.v());
+
+        param0.update(fd - f, dt);
+
         /* P.Y.C.H. — Put Your Controller (Probably Overengineered) Here */
-        vel = ( kp * param0.v() + ki * param0.i() + kd * param0.d() ) * N;
+        vel = kp * param0.v() + ki * param0.i() + kd * param0.d();
+        vel = vel * GR;
 
         // Apply control signal to actuator
         send_control_signal(vel);
-        
 
         // Finalize loop timing and logging
         __CONTROL_IO_END_LOOP();
