@@ -24,6 +24,7 @@ class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
 
     std::chrono::nanoseconds ts;
 
+    double theta_d = 0;
     double pos0 = 0;
     double pos1 = 0;
     double Ks = 104;
@@ -35,6 +36,9 @@ class PLUGIN_IO_NAME : public PLUGIN_IO_TYPE
     double t_ms, vel;
 
     VariableTrace theta_in, theta_out, error, dx, param0;
+
+    LowPassFilter lf_omega = LowPassFilter(20, 0.001f);
+    LowPassFilter lf_f = LowPassFilter(40, 0.001f);
 
 public:
     virtual ~PLUGIN_IO_NAME() = default;
@@ -81,6 +85,7 @@ public:
                                                                             { return theta_out.d(); }});
         _logger.file[0].vars.push_back(RecordVariable{.name = "error", .fnc = [this]()
                                                                        { return error.v(); }});
+        _logger.file[0].vars.push_back(RecordVariable{.name = "theta_d", ._ptr = &theta_d});
         _logger.file[0].vars.push_back(RecordVariable{.name = "vel", ._ptr = &vel});
         _logger.file[0].vars.push_back(RecordVariable{.name = "f", ._ptr = &f});
         _logger.file[0].vars.push_back(RecordVariable{.name = "fd", ._ptr = &fd});
@@ -118,6 +123,11 @@ public:
         _sensors[0]->read(&pos0, 0);
         _sensors[1]->read(&pos1, 0);
 
+        if (_references.size() > 0)
+        {
+            _references[0]->read(&theta_d, 0);
+        }
+
         // For continuous-time controller: compute dt with lower bound
         __CONTROL_IO_GET_DT(1e-3);
 
@@ -126,12 +136,12 @@ public:
         theta_in.update(pos0 / GR, dt);
         theta_out.update(pos1, dt);
 
-        static LowPassFilter lf_omega(20, 0.001f);
+        // static LowPassFilter lf_omega(20, 0.001f);
 
         dx.update(theta_out.v() - theta_in.v(), dt);
-        fd = Kv * (0 - theta_out.v()) + Bv * (0 - lf_omega.update(theta_out.d(), dt));
+        fd = Kv * (theta_d - theta_out.v()) + Bv * (0 - lf_omega.update(theta_out.d(), dt));
 
-        static LowPassFilter lf_f(40, 0.001f);
+        // static LowPassFilter lf_f(40, 0.001f);
         f = lf_f.update(Ks * dx.v());
 
         param0.update(fd - f, dt);
